@@ -17,9 +17,9 @@ while True:
     # print(lmlist)
     if(len(lmlist)!=0):
         data.append(lmlist)
-        labels.append(2)
+        labels.append(7)
     
-    if len(data) == 100:
+    if len(data) == 500:
         df = pd.DataFrame(data)
         df['label'] = labels
 
