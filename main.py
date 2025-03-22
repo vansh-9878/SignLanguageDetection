@@ -7,35 +7,60 @@ import numpy as np
 cap=cv2.VideoCapture(0)
 hand=htm.handDetector(max=1)
 # V2 best for now
-model=joblib.load('modelV4.pkl')
+model=joblib.load('modelV1.pkl')
 
+
+def calculate_angles_vectorized(A, B, C):
+    """Efficiently compute angles at point B given three sets of points A, B, and C."""
+    AB_x = A[:, 0] - B[:, 0]
+    AB_y = A[:, 1] - B[:, 1]
+    BC_x = C[:, 0] - B[:, 0]
+    BC_y = C[:, 1] - B[:, 1]
+
+    dot_product = AB_x * BC_x + AB_y * BC_y
+    magnitude_AB = np.sqrt(AB_x**2 + AB_y**2)
+    magnitude_BC = np.sqrt(BC_x**2 + BC_y**2)
+
+    cosine_theta = np.clip(dot_product / (magnitude_AB * magnitude_BC), -1.0, 1.0)
+    return np.degrees(np.arccos(cosine_theta))  # Convert to degrees
 
 def predictSign(data):
-    # data is a list containing the landmarks, where each landmark is [id, x, y]
-    # We'll assume data[0] is the list of landmarks.
-    landmarks = pd.DataFrame(data[0], columns=["id", "x", "y"])
-    
-    # Create a new DataFrame to hold our computed distance features.
-    df2 = pd.DataFrame()
-    
-    # Compute the pairwise Euclidean distances between landmarks.
-    # We loop over unique pairs (i, j) where i < j.
-    for i in range(len(landmarks)):
-        for j in range(i+1, len(landmarks)):
-            x1 = landmarks.loc[i, "x"]
-            y1 = landmarks.loc[i, "y"]
-            x2 = landmarks.loc[j, "x"]
-            y2 = landmarks.loc[j, "y"]
-            
-            # Calculate Euclidean distance.
-            dist = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
-            
-            # Store the distance as a feature. We wrap dist in a list to create a single-row DataFrame.
-            df2[f"dist_{i}_{j}"] = [dist]
-    
-    # Use the model to predict based on these features.
+    landmarks = np.array(data[0])[:, 1:]  # Extract x, y coordinates as NumPy array
+
+    feature_dict = {}  # Dictionary to store features before creating DataFrame
+
+    num_points = landmarks.shape[0]  # Number of landmarks
+
+    # Compute distances (vectorized)
+    i_indices, j_indices = np.triu_indices(num_points, k=1)  # Get upper triangle indices
+    distances = np.sqrt(
+        (landmarks[i_indices, 0] - landmarks[j_indices, 0]) ** 2 + 
+        (landmarks[i_indices, 1] - landmarks[j_indices, 1]) ** 2
+    )
+
+    # Store distance features
+    for idx, (i, j) in enumerate(zip(i_indices, j_indices)):
+        feature_dict[f"dist_{i}_{j}"] = distances[idx]
+
+    # Compute angles (vectorized)
+    i_indices, j_indices, k_indices = np.triu_indices(num_points, k=2)  # Get triplet indices
+    A = landmarks[i_indices]
+    B = landmarks[j_indices]
+    C = landmarks[k_indices]
+
+    angles = calculate_angles_vectorized(A, B, C)
+
+    # Store angle features
+    for idx, (i, j, k) in enumerate(zip(i_indices, j_indices, k_indices)):
+        feature_dict[f"angle_{i}_{j}_{k}"] = angles[idx]
+
+    # Convert dictionary to DataFrame
+    df2 = pd.DataFrame([feature_dict])
+
+    # Predict using the model
     predictions = model.predict(df2)
     return predictions[0]
+
 
 
 while True:
