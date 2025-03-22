@@ -7,26 +7,35 @@ import numpy as np
 cap=cv2.VideoCapture(0)
 hand=htm.handDetector(max=1)
 # V2 best for now
-model=joblib.load('modelV3.pkl')
+model=joblib.load('modelV4.pkl')
 
 
 def predictSign(data):
-    df=pd.DataFrame(data)
-    df2=pd.DataFrame()
-    # print(df.columns)
-    for col in df.columns:
-        # col=str(col)
-        # print(col)
-        first=str(col)+'x'
-        second=str(col)+'y'
-        df2[first]=df[col].astype(str).str.strip('[]').str.split(',').str[1].astype('int')
-        df2[second]=df[col].astype(str).str.strip('[]').str.split(',').str[2].astype('int')
+    # data is a list containing the landmarks, where each landmark is [id, x, y]
+    # We'll assume data[0] is the list of landmarks.
+    landmarks = pd.DataFrame(data[0], columns=["id", "x", "y"])
     
-    # print(df2.columns)
-    predictions=model.predict(df2)
+    # Create a new DataFrame to hold our computed distance features.
+    df2 = pd.DataFrame()
+    
+    # Compute the pairwise Euclidean distances between landmarks.
+    # We loop over unique pairs (i, j) where i < j.
+    for i in range(len(landmarks)):
+        for j in range(i+1, len(landmarks)):
+            x1 = landmarks.loc[i, "x"]
+            y1 = landmarks.loc[i, "y"]
+            x2 = landmarks.loc[j, "x"]
+            y2 = landmarks.loc[j, "y"]
+            
+            # Calculate Euclidean distance.
+            dist = np.sqrt((x1 - x2)**2 + (y1 - y2)**2)
+            
+            # Store the distance as a feature. We wrap dist in a list to create a single-row DataFrame.
+            df2[f"dist_{i}_{j}"] = [dist]
+    
+    # Use the model to predict based on these features.
+    predictions = model.predict(df2)
     return predictions[0]
-    # return 0
-
 
 
 while True:
